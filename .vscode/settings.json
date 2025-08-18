@@ -1,0 +1,11 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "driver": "SQLite",
+            "name": "trend",
+            "database": "${workspaceFolder:BUSINFO702-2025Q3-Project-group-1}/trend.db"
+        }
+    ],
+    "sqltools.useNodeRuntime": true
+}
