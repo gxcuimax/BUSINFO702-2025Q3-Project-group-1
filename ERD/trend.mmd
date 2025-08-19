@@ -1,0 +1,61 @@
+erDiagram
+    ConsumerTrends {
+        int date_id FK
+        int region_id FK
+        int product_id FK
+        text video_id FK
+        real total_sales
+        real total_profit
+        real total_orders
+        real total_discount
+        real total_views
+        real total_likes
+        real total_dislikes
+        real total_comments
+        real avg_employment_rate
+        real avg_education_level
+        real avg_age
+    }
+
+    Time {
+        int date_id PK
+        int year
+        int month
+        int quarter
+    }
+
+    Region {
+        int region_id PK
+        text state
+        text region
+        text metro_status
+    }
+
+    Product {
+        int product_id PK
+        text category_name
+    }
+
+    Demography {
+        int region_id FK
+        int date_id FK
+        real population_size
+        real avg_age
+        real employment_rate
+        real education_index
+        text race_distribution
+    }
+
+    YouTubeVideo {
+        text video_id PK
+        text title
+        text categoryId
+        text channelTitle
+        date publishedAt
+    }
+
+    ConsumerTrends }o--|| Time : "by time"
+    ConsumerTrends }o--|| Region : "in region"
+    ConsumerTrends }o--|| Product : "about product"
+    ConsumerTrends }o--|| Demography : "population context"
+    ConsumerTrends }o--|| YouTubeVideo : "related trend"
