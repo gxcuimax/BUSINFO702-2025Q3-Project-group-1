@@ -1,20 +1,19 @@
 erDiagram
-    ConsumerTrends {
+    Trend {
+        int trend_id pk
         int date_id FK
-        int region_id FK
-        int product_id FK
-        text video_id FK
+        int location_id FK
+        int ptrend_id FK
+        int vtrend_id FK
         real total_sales
+        real total_quantity
         real total_profit
         real total_orders
-        real total_discount
+        real avg_discount
         real total_views
         real total_likes
         real total_dislikes
         real total_comments
-        real avg_employment_rate
-        real avg_education_level
-        real avg_age
     }
 
     Time {
@@ -22,40 +21,50 @@ erDiagram
         int year
         int month
         int quarter
+        int day
+        text dayofweek
     }
 
-    Region {
-        int region_id PK
-        text state
-        text region
-        text metro_status
-    }
-
-    Product {
-        int product_id PK
-        text category_name
-    }
-
-    Demography {
-        int region_id FK
-        int date_id FK
-        real population_size
+    Location {
+        int location_id PK
+        int population
+        real avg_household
         real avg_age
-        real employment_rate
-        real education_index
+        real male_rate
         text race_distribution
+        text marital_distribution
+        text citizenship_distribution
+        int employment_count
+        text education_distribution
     }
 
-    YouTubeVideo {
-        text video_id PK
-        text title
-        text categoryId
-        text channelTitle
-        date publishedAt
+    ProductTrend {
+        int ptrend_id PK
+        int product_id pk
+        text category
+        text product_name
+        int cusmtomer_count
+        text customer_segment_distribution
+        real sales
+        real quantity
+        real profit 
+        real discount
     }
 
-    ConsumerTrends }o--|| Time : "by time"
-    ConsumerTrends }o--|| Region : "in region"
-    ConsumerTrends }o--|| Product : "about product"
-    ConsumerTrends }o--|| Demography : "population context"
-    ConsumerTrends }o--|| YouTubeVideo : "related trend"
+    YouTubeVideoTrend {
+        int vtrend_id PK
+        text top_categories
+        text top_tags
+        text video_1st
+        text description_1st
+        text video_2nd
+        text description_2nd
+        text video_3rd
+        text description_3rd
+    }
+
+
+    Trend }o--|| Time : "by time"
+    Trend }o--|| Location : "in region"
+    Trend }o--|| ProductTrend : "about product"
+    Trend }o--|| YouTubeVideoTrend : "about YouTube video"
