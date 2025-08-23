@@ -1,1 +1,221 @@
+SELECT
+    -- State (STATEFIP)
+    CASE STATEFIP
+        WHEN 1  THEN 'Alabama'
+        WHEN 2  THEN 'Alaska'
+        WHEN 4  THEN 'Arizona'
+        WHEN 5  THEN 'Arkansas'
+        WHEN 6  THEN 'California'
+        WHEN 8  THEN 'Colorado'
+        WHEN 9  THEN 'Connecticut'
+        WHEN 10 THEN 'Delaware'
+        WHEN 11 THEN 'District of Columbia'
+        WHEN 12 THEN 'Florida'
+        WHEN 13 THEN 'Georgia'
+        WHEN 15 THEN 'Hawaii'
+        WHEN 16 THEN 'Idaho'
+        WHEN 17 THEN 'Illinois'
+        WHEN 18 THEN 'Indiana'
+        WHEN 19 THEN 'Iowa'
+        WHEN 20 THEN 'Kansas'
+        WHEN 21 THEN 'Kentucky'
+        WHEN 22 THEN 'Louisiana'
+        WHEN 23 THEN 'Maine'
+        WHEN 24 THEN 'Maryland'
+        WHEN 25 THEN 'Massachusetts'
+        WHEN 26 THEN 'Michigan'
+        WHEN 27 THEN 'Minnesota'
+        WHEN 28 THEN 'Mississippi'
+        WHEN 29 THEN 'Missouri'
+        WHEN 30 THEN 'Montana'
+        WHEN 31 THEN 'Nebraska'
+        WHEN 32 THEN 'Nevada'
+        WHEN 33 THEN 'New Hampshire'
+        WHEN 34 THEN 'New Jersey'
+        WHEN 35 THEN 'New Mexico'
+        WHEN 36 THEN 'New York'
+        WHEN 37 THEN 'North Carolina'
+        WHEN 38 THEN 'North Dakota'
+        WHEN 39 THEN 'Ohio'
+        WHEN 40 THEN 'Oklahoma'
+        WHEN 41 THEN 'Oregon'
+        WHEN 42 THEN 'Pennsylvania'
+        WHEN 44 THEN 'Rhode Island'
+        WHEN 45 THEN 'South Carolina'
+        WHEN 46 THEN 'South Dakota'
+        WHEN 47 THEN 'Tennessee'
+        WHEN 48 THEN 'Texas'
+        WHEN 49 THEN 'Utah'
+        WHEN 50 THEN 'Vermont'
+        WHEN 51 THEN 'Virginia'
+        WHEN 53 THEN 'Washington'
+        WHEN 54 THEN 'West Virginia'
+        WHEN 55 THEN 'Wisconsin'
+        WHEN 56 THEN 'Wyoming'
+        WHEN 61 THEN 'Maine-New Hampshire-Vermont'
+        WHEN 65 THEN 'Montana-Idaho-Wyoming'
+        WHEN 68 THEN 'Alaska-Hawaii'
+        WHEN 69 THEN 'Nebraska-North Dakota-South Dakota'
+        WHEN 70 THEN 'ME-MA-NH-RI-VT'
+        WHEN 71 THEN 'Michigan-Wisconsin'
+        WHEN 72 THEN 'Minnesota-Iowa'
+        WHEN 73 THEN 'NE-ND-SD-KS'
+        WHEN 74 THEN 'Delaware-Virginia'
+        WHEN 75 THEN 'North Carolina-South Carolina'
+        WHEN 76 THEN 'Alabama-Mississippi'
+        WHEN 77 THEN 'Arkansas-Oklahoma'
+        WHEN 78 THEN 'Arizona-New Mexico-Colorado'
+        WHEN 79 THEN 'ID-WY-UT-MT-NV'
+        WHEN 80 THEN 'Alaska-Washington-Hawaii'
+        WHEN 81 THEN 'NH-ME-VT-RI'
+        WHEN 83 THEN 'South Carolina-Georgia'
+        WHEN 84 THEN 'Kentucky-Tennessee'
+        WHEN 85 THEN 'Arkansas-Louisiana-Oklahoma'
+        WHEN 87 THEN 'IA-ND-SD-NE-KS-MN-MO'
+        WHEN 88 THEN 'Washington-Oregon-Alaska-Hawaii'
+        WHEN 89 THEN 'MT-WY-CO-NM-UT-NV-AZ'
+        WHEN 90 THEN 'Delaware-Maryland-Virginia-West Virginia'
+        WHEN 97 THEN 'State not identified'
+        WHEN 99 THEN 'State not identified'
+        ELSE 'Unknown'
+    END AS state_name,
+
+    -- Region (REGION)
+    CASE REGION
+        WHEN 11 THEN 'New England Division'
+        WHEN 12 THEN 'Middle Atlantic Division'
+        WHEN 21 THEN 'East North Central Division'
+        WHEN 22 THEN 'West North Central Division'
+        WHEN 31 THEN 'South Atlantic Division'
+        WHEN 32 THEN 'East South Central Division'
+        WHEN 33 THEN 'West South Central Division'
+        WHEN 41 THEN 'Mountain Division'
+        WHEN 42 THEN 'Pacific Division'
+        WHEN 97 THEN 'State not identified'
+        ELSE 'Unknown'
+    END AS region_name,
+
+    -- Metro (METRO)
+    CASE METRO
+        WHEN 0 THEN 'Not identified'
+        WHEN 1 THEN 'Not in metropolitan area'
+        WHEN 2 THEN 'In central/principal city'
+        WHEN 3 THEN 'Not in central/principal city'
+        WHEN 4 THEN 'Central/principal city not identified'
+        WHEN 9 THEN 'Missing/unknown'
+        ELSE 'Unknown'
+    END AS metro_status,
+
+    -- Sex (SEX)
+    CASE SEX
+        WHEN 1 THEN 'Male'
+        WHEN 2 THEN 'Female'
+        WHEN 9 THEN 'NIU'
+        ELSE 'Unknown'
+    END AS male,
+
+    -- Race (RACE)
+    CASE RACE
+        WHEN 100 THEN 'White'
+        WHEN 200 THEN 'Black'
+        WHEN 300 THEN 'American Indian/Aleut/Eskimo'
+        WHEN 650 THEN 'Asian or Pacific Islander'
+        WHEN 651 THEN 'Asian only'
+        WHEN 652 THEN 'Hawaiian/Pacific Islander only'
+        WHEN 700 THEN 'Other (single) race, n.e.c.'
+        -- Two or more races
+        WHEN 801 THEN 'White-Black'
+        WHEN 802 THEN 'White-American Indian'
+        WHEN 803 THEN 'White-Asian'
+        WHEN 804 THEN 'White-Hawaiian/Pacific Islander'
+        WHEN 805 THEN 'Black-American Indian'
+        WHEN 806 THEN 'Black-Asian'
+        WHEN 807 THEN 'Black-Hawaiian/Pacific Islander'
+        WHEN 808 THEN 'American Indian-Asian'
+        WHEN 809 THEN 'Asian-Hawaiian/Pacific Islander'
+        WHEN 810 THEN 'White-Black-American Indian'
+        WHEN 811 THEN 'White-Black-Asian'
+        WHEN 812 THEN 'White-American Indian-Asian'
+        WHEN 813 THEN 'White-Asian-Hawaiian/Pacific Islander'
+        WHEN 814 THEN 'White-Black-American Indian-Asian'
+        WHEN 815 THEN 'American Indian-Hawaiian/Pacific Islander'
+        WHEN 816 THEN 'White-Black--Hawaiian/Pacific Islander'
+        WHEN 817 THEN 'White-American Indian-Hawaiian/Pacific Islander'
+        WHEN 818 THEN 'Black-American Indian-Asian'
+        WHEN 819 THEN 'White-American Indian-Asian-Hawaiian/Pacific Islander'
+        WHEN 820 THEN 'Two or three races, unspecified'
+        WHEN 830 THEN 'Four or five races, unspecified'
+        WHEN 999 THEN 'Blank'
+        ELSE 'Unknown'
+    END AS race_name,
+
+    -- Marital status (MARST)
+    CASE MARST
+        WHEN 1 THEN 'Married, spouse present'
+        WHEN 2 THEN 'Married, spouse absent'
+        WHEN 3 THEN 'Separated'
+        WHEN 4 THEN 'Divorced'
+        WHEN 5 THEN 'Widowed'
+        WHEN 6 THEN 'Never married/single'
+        WHEN 7 THEN 'Widowed or Divorced'
+        WHEN 9 THEN 'NIU'
+        ELSE 'Unknown'
+    END AS marital_status,
+
+    -- Citizenship (CITIZEN)
+    CASE CITIZEN
+        WHEN 1 THEN 'Born in U.S'
+        WHEN 2 THEN 'Born in U.S. outlying'
+        WHEN 3 THEN 'Born abroad of American parents'
+        WHEN 4 THEN 'Naturalized citizen'
+        WHEN 5 THEN 'Not a citizen'
+        WHEN 9 THEN 'NIU'
+        ELSE 'Unknown'
+    END AS citizenship_status
+
+CASE 
+    -- Primary school (Grades 1–6)
+    WHEN EDUC IN (10,11,12,13,14,20,21,22) THEN 'Primary school'
+
+    -- Middle school (Grades 7–9)
+    WHEN EDUC IN (30,31,32,40) THEN 'Middle school'
+
+    -- High school (Grades 10–12, including diploma cases)
+    WHEN EDUC IN (50,60,70,71,72,73) THEN 'High school'
+
+    -- Undergraduate (Some college, associate degree, 3–4 years college, bachelor's)
+    WHEN EDUC IN (80,81,90,91,92,100,110,111) THEN 'Undergraduate'
+
+    -- Graduate and above (Master's, professional, doctorate): Given this group of people was supposed to occupy a small part of the population, I segmented them together, and we could adjust the group at any time if necessary 
+    WHEN EDUC IN (120,121,122,123,124,125) THEN 'Graduate and above'
+
+    -- No schooling or preschool
+    WHEN EDUC IN (0,1,2) THEN 'No schooling/Preschool'
+
+    -- Missing or unknown
+    WHEN EDUC = 999 THEN 'Unknown'
+    ELSE 'Other'
+END AS education_group
+
+CASE 
+    -- Army
+    WHEN EMPSTAT = 1 THEN 'Army'
+
+    -- At Work (employed group)
+    WHEN EMPSTAT IN (10, 12) THEN 'At work'
+
+    -- Unemployed (experienced + new worker)
+    WHEN EMPSTAT IN (20, 21, 22) THEN 'Unemployed'
+
+    -- Not in labor force (NILF: housework, unable, school, other, unpaid, retired)
+    WHEN EMPSTAT IN (30, 31, 32, 33, 34, 35, 36) THEN 'NILF'
+
+    ELSE 'Other'
+END AS employment_group
+
+
+    household,
+    age,
+
+FROM Demographics of USA within states from 2021 to 2022.csv;
 
