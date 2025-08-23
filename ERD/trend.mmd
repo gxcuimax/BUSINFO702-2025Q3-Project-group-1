@@ -27,28 +27,41 @@ erDiagram
 
     Location {
         int location_id PK
+        text state
+        text region
         int population
+        text metro_statu
         real avg_household
         real avg_age
         real male_rate
         text race_distribution
         text marital_distribution
         text citizenship_distribution
-        int employment_count
+        int employment_rate
+        int armed_rate
         text education_distribution
     }
 
     ProductTrend {
         int ptrend_id PK
-        int product_id pk
-        text category
-        text product_name
-        int cusmtomer_count
-        text customer_segment_distribution
-        real sales
-        real quantity
-        real profit 
-        real discount
+        text orders_Office_Supplies
+        text top_products_OS
+        real sales_OS
+        real quantity_OS
+        real profit_OS
+        real avg_discount_OS
+        text orders_Furniture
+        text top_products_F
+        real sales_F
+        real quantity_F
+        real profit_F
+        real avg_discount_F
+        text orders_Technology
+        text top_products_T
+        real sales_T
+        real quantity_T
+        real profit_T
+        real avg_discount_T
     }
 
     YouTubeVideoTrend {
@@ -57,10 +70,13 @@ erDiagram
         text top_tags
         text video_1st
         text description_1st
+        text engagement_1st
         text video_2nd
         text description_2nd
+        text engagement_2nd
         text video_3rd
         text description_3rd
+        text engagement_3rd
     }
 
 
@@ -68,3 +84,4 @@ erDiagram
     Trend }o--|| Location : "in region"
     Trend }o--|| ProductTrend : "about product"
     Trend }o--|| YouTubeVideoTrend : "about YouTube video"
+
