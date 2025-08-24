@@ -372,3 +372,507 @@ JOIN youtube_trend y
   ON y.year  = d.year
  AND y.month = d.month
 ORDER BY d.year, d.month;
+
+-- Ecom aggregation: State x Year x Month x category
+CREATE VIEW ecom_agg AS
+SELECT 
+    customer_state AS state,
+    CAST(strftime('%Y', order_date) AS INT) AS year,
+    CAST(strftime('%m', order_date) AS INT) AS month,
+    category_name,
+    SUM(sales_per_order) AS total_sales,
+    SUM(profit_per_order) AS total_profit,
+    SUM(order_quantity) AS total_quantity
+FROM Ecom
+GROUP BY state, year, month, category_name;
+
+-- Demo aggregation:  State x Year x Month
+-- *** I plan that create the table as below when we define the var dictionary, will change for running this after we settle data clean done.
+-- CREATE VIEW demo_var_dictionary AS
+-- SELECT
+-- YEAR,
+-- MONTH,
+-- STATEFIP,
+-- WTFINL AS w,
+-- AGE,
+-- EDUC,
+-- EMPSTAT,
+-- SEX,
+-- CITIZEN,
+-- ...（CASE...WHEN...）
+-- FROM Demo;
+-- DROP VIEW IF EXISTS demo_agg;
+
+CREATE VIEW demo_agg AS
+SELECT
+    YEAR,
+    MONTH,
+    STATEFIP AS state_name,
+    
+    -- Total weight
+    SUM(w) AS total_weight,
+
+    -- Average age
+    SUM(w * AGE) * 1.0 / SUM(w) AS avg_age,
+
+    -- Share bachelor and above
+    SUM(CASE WHEN education_group IN ('Undergraduate','Graduate and above') THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_undergraduate_plus,
+	
+	-- Share bachelor
+	SUM(CASE WHEN education_group = 'Undergraduate' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_undergraduate,
+
+	-- Share master and above
+    SUM(CASE WHEN education_group = 'Graduate and above' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_graduate_plus,
+	
+    -- Share employed
+    SUM(CASE WHEN employment_group = 'At work' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_employed,
+
+    -- Share unemployed
+    SUM(CASE WHEN employment_group = 'Unemployed' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_unemployed,
+
+    -- Share male
+    SUM(CASE WHEN male = 'Male' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_male,
+
+    -- share citizen
+    SUM(CASE WHEN citizenship_status IN ('Born in U.S','Born in U.S. outlying','Born abroad of American parents','Naturalized citizen') 
+             THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_citizen
+
+FROM demo_var_dictionary
+GROUP BY YEAR, MONTH, STATEFIP;
+
+-- Demo aggregation(Demo trend): YEAR X MONTH
+DROP VIEW IF EXISTS demo_trend;
+
+CREATE VIEW demo_trend AS
+SELECT
+  year,
+  month,
+
+  -- Total weight (national population base)
+  SUM(total_weight) AS us_total_weight,
+
+  -- Weighted average age
+  SUM(avg_age * total_weight) * 1.0 / SUM(total_weight) AS us_avg_age,
+
+  -- Education shares: undergraduate+, undergraduate only, graduate+
+  SUM(share_undergraduate_plus * total_weight) * 1.0 / SUM(total_weight) AS us_share_undergraduate_plus,
+  SUM(share_undergraduate * total_weight)      * 1.0 / SUM(total_weight) AS us_share_undergraduate,
+  SUM(share_graduate_plus * total_weight)      * 1.0 / SUM(total_weight) AS us_share_graduate_plus,
+
+  -- Employment / unemployment shares
+  SUM(share_employed * total_weight)   * 1.0 / SUM(total_weight) AS us_share_employed,
+  SUM(share_unemployed * total_weight) * 1.0 / SUM(total_weight) AS us_share_unemployed,
+
+  -- Gender / citizenship shares
+  SUM(share_male * total_weight)    * 1.0 / SUM(total_weight) AS us_share_male,
+  SUM(share_citizen * total_weight) * 1.0 / SUM(total_weight) AS us_share_citizen
+
+FROM demo_agg_named
+GROUP BY year, month
+ORDER BY year, month;
+
+-- Youtube aggregation(Youtube trend): YEAR X MONTH
+-- Label Youtube videos
+-- Label YouTube records and construct engagement
+DROP VIEW IF EXISTS youtube_labeled;
+
+CREATE VIEW youtube_labeled AS
+SELECT
+  CAST(strftime('%Y', publishedAt) AS INT) AS year,
+  CAST(strftime('%m', publishedAt) AS INT) AS month,
+
+  -- Map categories to three focus groups
+  CASE
+    WHEN categoryId IN (24) THEN 'Entertainment'
+    WHEN categoryId IN (20) THEN 'Gaming'
+    WHEN categoryId IN (28) THEN 'Technology'
+    ELSE 'Other'
+  END AS ycat,
+
+  COALESCE(view_count,    0) AS views,
+  COALESCE(like_count,    0) AS likes,
+  COALESCE(comment_count, 0) AS comments,
+
+  -- Simple engagement metric
+  (COALESCE(view_count,0) + COALESCE(like_count,0) + COALESCE(comment_count,0)) AS engagement
+FROM Youtube;
+
+-- Aggregate by month
+-- Monthly national trends for Entertainment / Gaming / Technology
+DROP VIEW IF EXISTS youtube_trend;
+
+CREATE VIEW youtube_trend AS
+WITH agg AS (
+  SELECT
+    year, month, ycat,
+    SUM(engagement) AS eng_sum,
+    SUM(views)      AS views_sum,
+    SUM(likes)      AS likes_sum,
+    SUM(comments)   AS comments_sum,
+    COUNT(*)        AS video_count
+  FROM youtube_labeled
+  GROUP BY year, month, ycat
+),
+pivot AS (
+  SELECT
+    year, month,
+
+    -- Engagement totals by category
+    SUM(CASE WHEN ycat='Entertainment' THEN eng_sum ELSE 0 END) AS eng_entertainment,
+    SUM(CASE WHEN ycat='Gaming'        THEN eng_sum ELSE 0 END) AS eng_gaming,
+    SUM(CASE WHEN ycat='Technology'    THEN eng_sum ELSE 0 END) AS eng_technology,
+
+    -- Views / Likes / Comments / Video counts
+    SUM(CASE WHEN ycat='Entertainment' THEN views_sum ELSE 0 END) AS views_entertainment,
+    SUM(CASE WHEN ycat='Gaming'        THEN views_sum ELSE 0 END) AS views_gaming,
+    SUM(CASE WHEN ycat='Technology'    THEN views_sum ELSE 0 END) AS views_technology,
+
+    SUM(CASE WHEN ycat='Entertainment' THEN likes_sum ELSE 0 END) AS likes_entertainment,
+    SUM(CASE WHEN ycat='Gaming'        THEN likes_sum ELSE 0 END) AS likes_gaming,
+    SUM(CASE WHEN ycat='Technology'    THEN likes_sum ELSE 0 END) AS likes_technology,
+
+    SUM(CASE WHEN ycat='Entertainment' THEN comments_sum ELSE 0 END) AS comments_entertainment,
+    SUM(CASE WHEN ycat='Gaming'        THEN comments_sum ELSE 0 END) AS comments_gaming,
+    SUM(CASE WHEN ycat='Technology'    THEN comments_sum ELSE 0 END) AS comments_technology,
+
+    SUM(CASE WHEN ycat='Entertainment' THEN video_count ELSE 0 END) AS videos_entertainment,
+    SUM(CASE WHEN ycat='Gaming'        THEN video_count ELSE 0 END) AS videos_gaming,
+    SUM(CASE WHEN ycat='Technology'    THEN video_count ELSE 0 END) AS videos_technology
+  FROM agg
+  GROUP BY year, month
+),
+tot AS (
+  SELECT
+    year, month,
+    (eng_entertainment + eng_gaming + eng_technology) AS eng_total
+  FROM pivot
+)
+SELECT
+  p.year, p.month,
+
+  -- Relative shares
+  (p.eng_entertainment * 1.0 / NULLIF(t.eng_total,0)) AS us_share_entertainment,
+  (p.eng_gaming        * 1.0 / NULLIF(t.eng_total,0)) AS us_share_gaming,
+  (p.eng_technology    * 1.0 / NULLIF(t.eng_total,0)) AS us_share_technology,
+
+  -- Absolute engagement totals
+  p.eng_entertainment, p.eng_gaming, p.eng_technology,
+
+  -- Optional raw views/likes/comments/videos
+  p.views_entertainment,    p.views_gaming,    p.views_technology,
+  p.likes_entertainment,    p.likes_gaming,    p.likes_technology,
+  p.comments_entertainment, p.comments_gaming, p.comments_technology,
+  p.videos_entertainment,   p.videos_gaming,   p.videos_technology
+
+FROM pivot p
+JOIN tot t USING (year, month)
+ORDER BY year, month;
+
+
+-- RQ1
+-- Panel Data with Differences (for RQ1)
+DROP VIEW IF EXISTS panel_rq1;
+
+CREATE VIEW panel_rq1 AS
+SELECT
+  e.year,
+  e.month,
+  e.state AS state_name,
+  e.category_name,
+  e.total_sales,
+  e.total_profit,
+  e.total_quantity,
+  d.total_weight AS pop_weight,
+  d.avg_age,
+  d.share_undergraduate_plus,
+  d.share_employed,
+  d.share_unemployed,
+  d.share_male,
+  d.share_citizen
+FROM ecom_agg e
+LEFT JOIN demo_agg d
+  ON d.YEAR  = e.year
+ AND d.MONTH = e.month
+ AND d.state_name = e.state;
+
+-- RQ2
+-- 1. Panel Data with Differences (for RQ2)
+DROP VIEW IF EXISTS panel_rq2;
+
+CREATE VIEW panel_rq2 AS
+SELECT
+  e.year,
+  e.month,
+  e.state              AS state_name,
+  e.category_name,
+
+  -- Dependent Variable (choose one for regression)
+  e.total_sales,
+  e.total_profit,
+  e.total_quantity,
+
+  -- Education and Control Variables
+  d.share_undergraduate_plus,
+  d.share_undergraduate,
+  d.share_graduate_plus,
+  d.share_employed,
+  d.share_unemployed,
+  d.avg_age,
+  d.share_male,
+  d.share_citizen,
+
+  -- Category Dummy Variables
+  CASE WHEN e.category_name='Technology'       THEN 1 ELSE 0 END AS is_tech,
+  CASE WHEN e.category_name='Furniture'        THEN 1 ELSE 0 END AS is_furniture,
+  CASE WHEN e.category_name='Office Supplies'  THEN 1 ELSE 0 END AS is_office,
+
+  -- Interaction Terms (Education+ × Category)
+  CASE WHEN e.category_name='Technology'       THEN d.share_undergraduate_plus ELSE 0 END AS edu_up_x_tech,
+  CASE WHEN e.category_name='Furniture'        THEN d.share_undergraduate_plus ELSE 0 END AS edu_up_x_furn,
+  CASE WHEN e.category_name='Office Supplies'  THEN d.share_undergraduate_plus ELSE 0 END AS edu_up_x_office
+
+FROM ecom_agg e
+LEFT JOIN demo_agg_named d
+  ON d.year  = e.year
+ AND d.month = e.month
+ AND d.state_name = e.state;
+
+-- 2. State-level Clustering Features (for RQ2)
+DROP VIEW IF EXISTS panel_rq2_diff;
+
+CREATE VIEW panel_rq2_diff AS
+WITH base AS (
+  SELECT
+    e.year,
+    e.month,
+    e.state              AS state_name,
+    e.category_name,
+    e.total_sales,
+    d.share_undergraduate_plus
+  FROM ecom_agg e
+  LEFT JOIN demo_agg_named d
+    ON d.year=e.year AND d.month=e.month AND d.state_name=e.state
+),
+lagged AS (
+  SELECT
+    *,
+    LAG(total_sales, 1) OVER (PARTITION BY state_name, category_name ORDER BY year, month) AS sales_lag1,
+    LAG(share_undergraduate_plus, 1) OVER (PARTITION BY state_name ORDER BY year, month)    AS edu_up_lag1
+  FROM base
+)
+SELECT
+  *,
+  (total_sales - sales_lag1)               AS d_sales_m1,
+  (share_undergraduate_plus - edu_up_lag1) AS d_edu_up_m1,
+  CASE WHEN category_name='Technology' THEN 1 ELSE 0 END AS is_tech
+FROM lagged;
+
+-- 3. Aggregated Demographics (with Labels)
+DROP VIEW IF EXISTS state_cluster_rq2;
+
+CREATE VIEW state_cluster_rq2 AS
+WITH sales_mix AS (
+  -- state x month Tech share sales
+  SELECT
+    e.year, e.month, e.state AS state_name,
+    SUM(CASE WHEN e.category_name='Technology' THEN e.total_sales ELSE 0 END) * 1.0 /
+    NULLIF(SUM(e.total_sales),0) AS tech_sales_share
+  FROM ecom_agg e
+  GROUP BY e.year, e.month, e.state
+),
+sales_mix_lag AS (
+  SELECT
+    *,
+    LAG(tech_sales_share, 1) OVER (PARTITION BY state_name ORDER BY year, month) AS tech_share_lag1
+  FROM sales_mix
+),
+edu_series AS (
+  SELECT year, month, state_name, share_undergraduate_plus
+  FROM demo_agg_named
+),
+edu_lag AS (
+  SELECT
+    *,
+    LAG(share_undergraduate_plus, 1) OVER (PARTITION BY state_name ORDER BY year, month) AS edu_up_lag1
+  FROM edu_series
+)
+SELECT
+  s.state_name,
+  AVG(s.tech_sales_share)                          AS tech_share_mean,
+  AVG(ABS(s.tech_sales_share - s.tech_share_lag1)) AS tech_share_mae,
+  AVG(e.share_undergraduate_plus)                  AS edu_up_mean,
+  AVG(e.share_undergraduate_plus - e.edu_up_lag1)  AS edu_up_d1_mean
+FROM sales_mix_lag s
+JOIN edu_lag e
+  ON e.state_name = s.state_name
+ AND e.year = s.year AND e.month = s.month
+GROUP BY s.state_name;
+
+-- RQ3
+-- Final panel for RQ3: national demographics × YouTube category trends (by month)
+DROP VIEW IF EXISTS panel_rq3;
+
+CREATE VIEW panel_rq3 AS
+SELECT
+  d.year,
+  d.month,
+
+  -- Demographic trends (national, weighted)
+  d.us_total_weight,
+  d.us_avg_age,
+  d.us_share_undergraduate_plus,
+  d.us_share_undergraduate,
+  d.us_share_graduate_plus,
+  d.us_share_employed,
+  d.us_share_unemployed,
+  d.us_share_male,
+  d.us_share_citizen,
+
+  -- YouTube category shares (relative within the 3 tracked cats)
+  y.us_share_entertainment,
+  y.us_share_gaming,
+  y.us_share_technology,
+
+  -- Optional: absolute engagement totals (handy for charts / robustness)
+  y.eng_entertainment, y.eng_gaming, y.eng_technology,
+
+  -- Optional: raw views/likes/comments/videos by category
+  y.views_entertainment,    y.views_gaming,    y.views_technology,
+  y.likes_entertainment,    y.likes_gaming,    y.likes_technology,
+  y.comments_entertainment, y.comments_gaming, y.comments_technology,
+  y.videos_entertainment,   y.videos_gaming,   y.videos_technology
+
+FROM demo_trend d
+JOIN youtube_trend y
+  ON y.year  = d.year
+ AND y.month = d.month
+ORDER BY d.year, d.month;
+
+-- RQ4: YouTube (shares/engagement) → E-commerce sales (by month), with lags
+
+DROP VIEW IF EXISTS ecom_trend_pivot;
+CREATE VIEW ecom_trend_pivot AS
+SELECT
+  year, month,
+  SUM(CASE WHEN category_name='Technology'       THEN total_sales ELSE 0 END) AS ec_technology,
+  SUM(CASE WHEN category_name='Furniture'        THEN total_sales ELSE 0 END) AS ec_furniture,
+  SUM(CASE WHEN category_name='Office Supplies'  THEN total_sales ELSE 0 END) AS ec_office
+FROM ecom_agg
+GROUP BY year, month;
+
+DROP VIEW IF EXISTS panel_rq4_base;
+CREATE VIEW panel_rq4_base AS
+SELECT
+  y.year, y.month,
+  -- YouTube category shares + absolute engagement (from your youtube_trend)
+  y.us_share_entertainment, y.us_share_gaming, y.us_share_technology,
+  y.eng_entertainment,      y.eng_gaming,      y.eng_technology,
+  -- E-commerce totals (pivoted)
+  e.ec_technology, e.ec_furniture, e.ec_office
+FROM youtube_trend y
+JOIN ecom_trend_pivot e USING (year, month)
+ORDER BY y.year, y.month;
+
+DROP VIEW IF EXISTS panel_rq4_lags;
+CREATE VIEW panel_rq4_lags AS
+WITH b AS (SELECT * FROM panel_rq4_base)
+SELECT
+  b.*,
+  -- YouTube shares (1–3 month lags)
+  LAG(us_share_entertainment,1) OVER (ORDER BY year,month) AS ent_lag1,
+  LAG(us_share_entertainment,2) OVER (ORDER BY year,month) AS ent_lag2,
+  LAG(us_share_entertainment,3) OVER (ORDER BY year,month) AS ent_lag3,
+
+  LAG(us_share_gaming,1) OVER (ORDER BY year,month) AS gam_lag1,
+  LAG(us_share_gaming,2) OVER (ORDER BY year,month) AS gam_lag2,
+  LAG(us_share_gaming,3) OVER (ORDER BY year,month) AS gam_lag3,
+
+  LAG(us_share_technology,1) OVER (ORDER BY year,month) AS tech_lag1,
+  LAG(us_share_technology,2) OVER (ORDER BY year,month) AS tech_lag2,
+  LAG(us_share_technology,3) OVER (ORDER BY year,month) AS tech_lag3,
+
+  -- E-commerce totals (1–3 month lags)
+  LAG(ec_technology,1) OVER (ORDER BY year,month) AS ec_tech_lag1,
+  LAG(ec_technology,2) OVER (ORDER BY year,month) AS ec_tech_lag2,
+  LAG(ec_technology,3) OVER (ORDER BY year,month) AS ec_tech_lag3,
+
+  LAG(ec_furniture,1)  OVER (ORDER BY year,month) AS ec_furn_lag1,
+  LAG(ec_furniture,2)  OVER (ORDER BY year,month) AS ec_furn_lag2,
+  LAG(ec_furniture,3)  OVER (ORDER BY year,month) AS ec_furn_lag3,
+
+  LAG(ec_office,1)     OVER (ORDER BY year,month) AS ec_office_lag1,
+  LAG(ec_office,2)     OVER (ORDER BY year,month) AS ec_office_lag2,
+  LAG(ec_office,3)     OVER (ORDER BY year,month) AS ec_office_lag3
+FROM b;
+
+-- Optional: first differences (Δ) to de-trend before Granger testing in R/Python
+DROP VIEW IF EXISTS panel_rq4_diff;
+CREATE VIEW panel_rq4_diff AS
+SELECT
+  year, month,
+  -- Δ e-commerce
+  ec_technology - ec_tech_lag1    AS d_ec_technology,
+  ec_furniture  - ec_furn_lag1    AS d_ec_furniture,
+  ec_office     - ec_office_lag1  AS d_ec_office,
+  -- Δ YouTube shares
+  us_share_entertainment - ent_lag1   AS d_ent_share,
+  us_share_gaming        - gam_lag1   AS d_gam_share,
+  us_share_technology    - tech_lag1  AS d_tech_share
+FROM panel_rq4_lags
+WHERE ent_lag1 IS NOT NULL;
+
+-- RQ5: Build state × month × category panel with demographics, log transforms, and interactions
+
+DROP VIEW IF EXISTS panel_rq5;
+CREATE VIEW panel_rq5 AS
+SELECT
+  e.year,
+  e.month,
+  e.state              AS state_name,
+  e.category_name,
+  e.total_sales,
+  e.total_profit,
+  e.total_quantity,
+  d.avg_age,
+  d.share_undergraduate_plus,
+  d.share_employed,
+  d.share_unemployed,
+  d.share_male,
+  d.share_citizen
+FROM ecom_agg_state e
+LEFT JOIN demo_agg_named d
+  ON d.year  = e.year
+ AND d.month = e.month
+ AND d.state_name = e.state;
+
+DROP VIEW IF EXISTS panel_rq5_log;
+CREATE VIEW panel_rq5_log AS
+SELECT
+  *,
+  -- log outcomes (add 1 to avoid ln(0) if needed)
+  ln(total_sales    + 1.0) AS ln_sales,
+  ln(total_quantity + 1.0) AS ln_qty,
+  -- log drivers
+  ln(NULLIF(avg_age,0))                                      AS ln_age,
+  ln(NULLIF(share_undergraduate_plus,0) + 1e-6)              AS ln_edu_up,
+  ln(NULLIF(share_employed,0)            + 1e-6)             AS ln_emp,
+  ln(NULLIF(share_unemployed,0)          + 1e-6)             AS ln_unemp,
+  ln(COALESCE(share_male,0.5))                                AS ln_male,    -- placeholders if null
+  ln(COALESCE(share_citizen,0.9))                             AS ln_citizen
+FROM panel_rq5;
+
+DROP VIEW IF EXISTS panel_rq5_interactions;
+CREATE VIEW panel_rq5_interactions AS
+SELECT
+  *,
+  -- Category dummies (Office Supplies as baseline)
+  CASE WHEN category_name='Technology'       THEN 1 ELSE 0 END AS is_tech,
+  CASE WHEN category_name='Furniture'        THEN 1 ELSE 0 END AS is_furniture,
+  CASE WHEN category_name='Office Supplies'  THEN 1 ELSE 0 END AS is_office,
+
+  -- Interactions: elasticity differences by category
+  (ln_edu_up * CASE WHEN category_name='Technology'      THEN 1 ELSE 0 END) AS ln_edu_x_tech,
+  (ln_edu_up * CASE WHEN category_name='Furniture'       THEN 1 ELSE 0 END) AS ln_edu_x_furn,
+  (ln_emp    * CASE WHEN category_name='Technology'      THEN 1 ELSE 0 END) AS ln_emp_x_tech,
+  (ln_emp    * CASE WHEN category_name='Furniture'       THEN 1 ELSE 0 END) AS ln_emp_x_furn
+FROM panel_rq5_log;
