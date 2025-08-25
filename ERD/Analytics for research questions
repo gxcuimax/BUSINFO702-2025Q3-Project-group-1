@@ -586,7 +586,7 @@ DROP VIEW IF EXISTS panel_rq4_base;
 CREATE VIEW panel_rq4_base AS
 SELECT
   y.year, y.month,
-  -- YouTube category shares + absolute engagement (from your youtube_trend)
+  -- YouTube category shares + absolute engagement (from the youtube_trend)
   y.us_share_entertainment, y.us_share_gaming, y.us_share_technology,
   y.eng_entertainment,      y.eng_gaming,      y.eng_technology,
   -- E-commerce totals (pivoted)
