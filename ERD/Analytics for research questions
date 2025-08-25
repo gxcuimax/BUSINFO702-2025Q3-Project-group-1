@@ -569,92 +569,165 @@ JOIN tot t USING (year, month)
 ORDER BY year, month;
 
 
+-- RQ4-1. Base panel (monthly national): YT shares + E-com sales (pivoted)
+DROP VIEW IF EXISTS panel_rq4;
 
--- RQ4: YouTube (shares/engagement) → E-commerce sales (by month), with lags
-
-DROP VIEW IF EXISTS ecom_trend_pivot;
-CREATE VIEW ecom_trend_pivot AS
+CREATE VIEW panel_rq4 AS
 SELECT
-  year, month,
-  SUM(CASE WHEN category_name='Technology'       THEN total_sales ELSE 0 END) AS ec_technology,
-  SUM(CASE WHEN category_name='Furniture'        THEN total_sales ELSE 0 END) AS ec_furniture,
-  SUM(CASE WHEN category_name='Office Supplies'  THEN total_sales ELSE 0 END) AS ec_office
-FROM ecom_agg
-GROUP BY year, month;
+  y.year,
+  y.month,
 
-DROP VIEW IF EXISTS panel_rq4_base;
-CREATE VIEW panel_rq4_base AS
-SELECT
-  y.year, y.month,
-  -- YouTube category shares + absolute engagement (from the youtube_trend)
-  y.us_share_entertainment, y.us_share_gaming, y.us_share_technology,
-  y.eng_entertainment,      y.eng_gaming,      y.eng_technology,
-  -- E-commerce totals (pivoted)
-  e.ec_technology, e.ec_furniture, e.ec_office
+  -- YouTube category shares (relative among tracked cats)
+  y.us_share_entertainment,
+  y.us_share_gaming,
+  y.us_share_technology,
+
+  -- Absolute engagement (optional controls)
+  y.eng_entertainment,
+  y.eng_gaming,
+  y.eng_technology,
+
+  -- E-commerce sales by headline categories (pivoted)
+  e.ec_technology,
+  e.ec_furniture,
+  e.ec_office
 FROM youtube_trend y
-JOIN ecom_trend_pivot e USING (year, month)
-ORDER BY y.year, y.month;
+JOIN (
+  SELECT
+    year, month,
+    SUM(CASE WHEN category_name='Technology'       THEN total_sales ELSE 0 END) AS ec_technology,
+    SUM(CASE WHEN category_name='Furniture'        THEN total_sales ELSE 0 END) AS ec_furniture,
+    SUM(CASE WHEN category_name='Office Supplies'  THEN total_sales ELSE 0 END) AS ec_office
+  FROM ecom_agg
+  GROUP BY year, month
+) e USING (year, month)
+ORDER BY year, month;
 
-DROP VIEW IF EXISTS panel_rq4_lags;
-CREATE VIEW panel_rq4_lags AS
-WITH b AS (SELECT * FROM panel_rq4_base)
-SELECT
-  b.*,
-  -- YouTube shares (1–3 month lags)
-  LAG(us_share_entertainment,1) OVER (ORDER BY year,month) AS ent_lag1,
-  LAG(us_share_entertainment,2) OVER (ORDER BY year,month) AS ent_lag2,
-  LAG(us_share_entertainment,3) OVER (ORDER BY year,month) AS ent_lag3,
-
-  LAG(us_share_gaming,1) OVER (ORDER BY year,month) AS gam_lag1,
-  LAG(us_share_gaming,2) OVER (ORDER BY year,month) AS gam_lag2,
-  LAG(us_share_gaming,3) OVER (ORDER BY year,month) AS gam_lag3,
-
-  LAG(us_share_technology,1) OVER (ORDER BY year,month) AS tech_lag1,
-  LAG(us_share_technology,2) OVER (ORDER BY year,month) AS tech_lag2,
-  LAG(us_share_technology,3) OVER (ORDER BY year,month) AS tech_lag3,
-
-  -- E-commerce totals (1–3 month lags)
-  LAG(ec_technology,1) OVER (ORDER BY year,month) AS ec_tech_lag1,
-  LAG(ec_technology,2) OVER (ORDER BY year,month) AS ec_tech_lag2,
-  LAG(ec_technology,3) OVER (ORDER BY year,month) AS ec_tech_lag3,
-
-  LAG(ec_furniture,1)  OVER (ORDER BY year,month) AS ec_furn_lag1,
-  LAG(ec_furniture,2)  OVER (ORDER BY year,month) AS ec_furn_lag2,
-  LAG(ec_furniture,3)  OVER (ORDER BY year,month) AS ec_furn_lag3,
-
-  LAG(ec_office,1)     OVER (ORDER BY year,month) AS ec_office_lag1,
-  LAG(ec_office,2)     OVER (ORDER BY year,month) AS ec_office_lag2,
-  LAG(ec_office,3)     OVER (ORDER BY year,month) AS ec_office_lag3
-FROM b;
-
--- Optional: first differences (Δ) to de-trend before Granger testing in R/Python
+-- RQ4-2. Add 1–3 month lags and first differences (Δ)
 DROP VIEW IF EXISTS panel_rq4_diff;
+
 CREATE VIEW panel_rq4_diff AS
+WITH lagged AS (
+  SELECT
+    p.*,
+
+    -- Lags of YouTube shares
+    LAG(us_share_entertainment,1) OVER (ORDER BY year,month) AS ent_lag1,
+    LAG(us_share_entertainment,2) OVER (ORDER BY year,month) AS ent_lag2,
+    LAG(us_share_entertainment,3) OVER (ORDER BY year,month) AS ent_lag3,
+
+    LAG(us_share_gaming,1) OVER (ORDER BY year,month) AS gam_lag1,
+    LAG(us_share_gaming,2) OVER (ORDER BY year,month) AS gam_lag2,
+    LAG(us_share_gaming,3) OVER (ORDER BY year,month) AS gam_lag3,
+
+    LAG(us_share_technology,1) OVER (ORDER BY year,month) AS tech_lag1,
+    LAG(us_share_technology,2) OVER (ORDER BY year,month) AS tech_lag2,
+    LAG(us_share_technology,3) OVER (ORDER BY year,month) AS tech_lag3,
+
+    -- Lags of E-com sales
+    LAG(ec_technology,1) OVER (ORDER BY year,month) AS ec_tech_lag1,
+    LAG(ec_furniture,1)  OVER (ORDER BY year,month) AS ec_furn_lag1,
+    LAG(ec_office,1)     OVER (ORDER BY year,month) AS ec_office_lag1
+  FROM panel_rq4 p
+)
 SELECT
   year, month,
-  -- Δ e-commerce
-  ec_technology - ec_tech_lag1    AS d_ec_technology,
-  ec_furniture  - ec_furn_lag1    AS d_ec_furniture,
-  ec_office     - ec_office_lag1  AS d_ec_office,
-  -- Δ YouTube shares
-  us_share_entertainment - ent_lag1   AS d_ent_share,
-  us_share_gaming        - gam_lag1   AS d_gam_share,
-  us_share_technology    - tech_lag1  AS d_tech_share
-FROM panel_rq4_lags
-WHERE ent_lag1 IS NOT NULL;
 
--- RQ5: Build state × month × category panel with demographics, log transforms, and interactions
+  -- Δ E-com sales (t – t-1)
+  (ec_technology - ec_tech_lag1)   AS d_ec_technology,
+  (ec_furniture  - ec_furn_lag1)   AS d_ec_furniture,
+  (ec_office     - ec_office_lag1) AS d_ec_office,
 
+  -- Δ YT shares (t – t-1)
+  (us_share_entertainment - ent_lag1) AS d_ent_share,
+  (us_share_gaming        - gam_lag1) AS d_gam_share,
+  (us_share_technology    - tech_lag1) AS d_tech_share,
+
+  -- Keep lagged YT share diffs for lead–lag checks
+  LAG((us_share_entertainment - ent_lag1),1) OVER (ORDER BY year,month) AS d_ent_lag1,
+  LAG((us_share_gaming        - gam_lag1),1) OVER (ORDER BY year,month) AS d_gam_lag1,
+  LAG((us_share_technology    - tech_lag1),1) OVER (ORDER BY year,month) AS d_tech_lag1,
+
+  LAG((us_share_entertainment - ent_lag1),2) OVER (ORDER BY year,month) AS d_ent_lag2,
+  LAG((us_share_gaming        - gam_lag1),2) OVER (ORDER BY year,month) AS d_gam_lag2,
+  LAG((us_share_technology    - tech_lag1),2) OVER (ORDER BY year,month) AS d_tech_lag2,
+
+  LAG((us_share_entertainment - ent_lag1),3) OVER (ORDER BY year,month) AS d_ent_lag3,
+  LAG((us_share_gaming        - gam_lag1),3) OVER (ORDER BY year,month) AS d_gam_lag3,
+  LAG((us_share_technology    - tech_lag1),3) OVER (ORDER BY year,month) AS d_tech_lag3
+FROM lagged
+WHERE ent_lag1 IS NOT NULL
+  AND ec_tech_lag1 IS NOT NULL
+  AND ec_furn_lag1 IS NOT NULL
+  AND ec_office_lag1 IS NOT NULL;
+-- RQ4-3. SQL-only lead–lag summary: correlate ΔEC with lagged ΔYT shares
+DROP VIEW IF EXISTS state_cluster_rq4;  -- name mirrors your RQ2 summary style
+
+CREATE VIEW state_cluster_rq4 AS
+WITH pairs AS (
+  -- Map categories to likely YT drivers (edit if needed)
+  SELECT 'Technology' AS cat, 1 AS lag, d_ec_technology AS y, d_tech_lag1 AS x FROM panel_rq4_diff
+  UNION ALL SELECT 'Technology', 2, d_ec_technology, d_tech_lag2 FROM panel_rq4_diff
+  UNION ALL SELECT 'Technology', 3, d_ec_technology, d_tech_lag3 FROM panel_rq4_diff
+
+  UNION ALL SELECT 'Furniture',  1, d_ec_furniture,  d_ent_lag1 FROM panel_rq4_diff
+  UNION ALL SELECT 'Furniture',  2, d_ec_furniture,  d_ent_lag2 FROM panel_rq4_diff
+  UNION ALL SELECT 'Furniture',  3, d_ec_furniture,  d_ent_lag3 FROM panel_rq4_diff
+
+  UNION ALL SELECT 'Office Supplies', 1, d_ec_office, d_gam_lag1 FROM panel_rq4_diff
+  UNION ALL SELECT 'Office Supplies', 2, d_ec_office, d_gam_lag2 FROM panel_rq4_diff
+  UNION ALL SELECT 'Office Supplies', 3, d_ec_office, d_gam_lag3 FROM panel_rq4_diff
+),
+clean AS (
+  SELECT cat, lag, x, y FROM pairs WHERE x IS NOT NULL AND y IS NOT NULL
+),
+stats AS (
+  SELECT
+    cat, lag,
+    COUNT(*) AS n,
+    SUM(x)   AS sx,  SUM(y) AS sy,
+    SUM(x*x) AS sxx, SUM(y*y) AS syy,
+    SUM(x*y) AS sxy
+  FROM clean
+  GROUP BY cat, lag
+)
+SELECT
+  cat,
+  lag,
+  n,
+  -- Pearson r
+  (n*sxy - sx*sy) * 1.0 /
+  (SQRT( (n*sxx - sx*sx) * (n*syy - sy*sy) )) AS r,
+  -- Approx significance flag (|t|≈≥2)
+  CASE
+    WHEN n > 2 THEN
+      CASE WHEN ABS( ((n*sxy - sx*sy) * 1.0 /
+                      (SQRT( (n*sxx - sx*sx) * (n*syy - sy*sy) ))) *
+                     SQRT( (n-2) * 1.0 /
+                           (1 - POWER( (n*sxy - sx*sy) * 1.0 /
+                                       (SQRT( (n*sxx - sx*sx) * (n*syy - sy*sy) )), 2) ) )
+                   ) >= 2
+           THEN 1 ELSE 0 END
+  END AS signif_approx
+FROM stats
+ORDER BY cat, lag;
+
+-- RQ5-1. Panel: state × month × category + demographics
 DROP VIEW IF EXISTS panel_rq5;
+
 CREATE VIEW panel_rq5 AS
 SELECT
   e.year,
   e.month,
   e.state              AS state_name,
   e.category_name,
+
+  -- Outcomes
   e.total_sales,
   e.total_profit,
   e.total_quantity,
+
+  -- Demographics (shares in 0–1)
   d.avg_age,
   d.share_undergraduate_plus,
   d.share_employed,
@@ -666,35 +739,96 @@ LEFT JOIN demo_agg_named d
   ON d.year  = e.year
  AND d.month = e.month
  AND d.state_name = e.state;
-
+-- RQ5-2. Log transforms for elasticity-style analysis
 DROP VIEW IF EXISTS panel_rq5_log;
+
 CREATE VIEW panel_rq5_log AS
 SELECT
   *,
-  -- log outcomes (add 1 to avoid ln(0) if needed)
   ln(total_sales    + 1.0) AS ln_sales,
   ln(total_quantity + 1.0) AS ln_qty,
-  -- log drivers
-  ln(NULLIF(avg_age,0))                                      AS ln_age,
-  ln(NULLIF(share_undergraduate_plus,0) + 1e-6)              AS ln_edu_up,
-  ln(NULLIF(share_employed,0)            + 1e-6)             AS ln_emp,
-  ln(NULLIF(share_unemployed,0)          + 1e-6)             AS ln_unemp,
-  ln(COALESCE(share_male,0.5))                                AS ln_male,    -- placeholders if null
-  ln(COALESCE(share_citizen,0.9))                             AS ln_citizen
+  ln(NULLIF(avg_age,0))                                     AS ln_age,
+  ln(NULLIF(share_undergraduate_plus,0) + 1e-6)             AS ln_edu_up,
+  ln(NULLIF(share_employed,0)            + 1e-6)            AS ln_emp,
+  ln(NULLIF(share_unemployed,0)          + 1e-6)            AS ln_unemp,
+  ln(COALESCE(share_male,0.5))                               AS ln_male,
+  ln(COALESCE(share_citizen,0.9))                            AS ln_citizen
 FROM panel_rq5;
+-- RQ5-3. Category-level elasticities: ln_sales ~ ln_edu_up and ln_sales ~ ln_emp (per category)
+-- (You can duplicate the block to test ln_unemp, ln_age, etc.)
 
-DROP VIEW IF EXISTS panel_rq5_interactions;
-CREATE VIEW panel_rq5_interactions AS
+-- A) Elasticity wrt Education (Undergraduate+)
+DROP VIEW IF EXISTS rq5_elasticity_edu;
+
+CREATE VIEW rq5_elasticity_edu AS
+WITH base AS (
+  SELECT category_name, ln_sales AS y, ln_edu_up AS x
+  FROM panel_rq5_log
+  WHERE ln_sales IS NOT NULL AND ln_edu_up IS NOT NULL
+),
+grp AS (
+  SELECT
+    category_name,
+    COUNT(*) AS n,
+    SUM(x) AS sx, SUM(y) AS sy,
+    SUM(x*x) AS sxx, SUM(y*y) AS syy,
+    SUM(x*y) AS sxy
+  FROM base
+  GROUP BY category_name
+),
+rstat AS (
+  SELECT
+    category_name, n, sx, sy, sxx, syy, sxy,
+    (n*sxy - sx*sy) * 1.0 /
+    (SQRT( (n*sxx - sx*sx) * (n*syy - sy*sy) )) AS r
+  FROM grp
+)
 SELECT
-  *,
-  -- Category dummies (Office Supplies as baseline)
-  CASE WHEN category_name='Technology'       THEN 1 ELSE 0 END AS is_tech,
-  CASE WHEN category_name='Furniture'        THEN 1 ELSE 0 END AS is_furniture,
-  CASE WHEN category_name='Office Supplies'  THEN 1 ELSE 0 END AS is_office,
+  category_name,
+  n,
+  r,
+  -- slope (elasticity) = r * (sd_y / sd_x)
+  r * ( SQRT( (n*syy - sy*sy)*1.0 ) / SQRT(n) ) /
+      ( SQRT( (n*sxx - sx*sx)*1.0 ) / SQRT(n) ) AS elasticity,
+  -- approx t-stat for r (df=n-2)
+  CASE WHEN n>2 THEN r * SQRT( (n-2) * 1.0 / (1 - r*r) ) END AS t_stat,
+  CASE WHEN n>2 AND ABS(r * SQRT( (n-2) * 1.0 / (1 - r*r) )) >= 2 THEN 1 ELSE 0 END AS signif_approx
+FROM rstat
+ORDER BY category_name;
 
-  -- Interactions: elasticity differences by category
-  (ln_edu_up * CASE WHEN category_name='Technology'      THEN 1 ELSE 0 END) AS ln_edu_x_tech,
-  (ln_edu_up * CASE WHEN category_name='Furniture'       THEN 1 ELSE 0 END) AS ln_edu_x_furn,
-  (ln_emp    * CASE WHEN category_name='Technology'      THEN 1 ELSE 0 END) AS ln_emp_x_tech,
-  (ln_emp    * CASE WHEN category_name='Furniture'       THEN 1 ELSE 0 END) AS ln_emp_x_furn
-FROM panel_rq5_log;
+-- B) Elasticity wrt Employment
+DROP VIEW IF EXISTS rq5_elasticity_emp;
+
+CREATE VIEW rq5_elasticity_emp AS
+WITH base AS (
+  SELECT category_name, ln_sales AS y, ln_emp AS x
+  FROM panel_rq5_log
+  WHERE ln_sales IS NOT NULL AND ln_emp IS NOT NULL
+),
+grp AS (
+  SELECT
+    category_name,
+    COUNT(*) AS n,
+    SUM(x) AS sx, SUM(y) AS sy,
+    SUM(x*x) AS sxx, SUM(y*y) AS syy,
+    SUM(x*y) AS sxy
+  FROM base
+  GROUP BY category_name
+),
+rstat AS (
+  SELECT
+    category_name, n, sx, sy, sxx, syy, sxy,
+    (n*sxy - sx*sy) * 1.0 /
+    (SQRT( (n*sxx - sx*sx) * (n*syy - sy*sy) )) AS r
+  FROM grp
+)
+SELECT
+  category_name,
+  n,
+  r,
+  r * ( SQRT( (n*syy - sy*sy)*1.0 ) / SQRT(n) ) /
+      ( SQRT( (n*sxx - sx*sx)*1.0 ) / SQRT(n) ) AS elasticity,
+  CASE WHEN n>2 THEN r * SQRT( (n-2) * 1.0 / (1 - r*r) ) END AS t_stat,
+  CASE WHEN n>2 AND ABS(r * SQRT( (n-2) * 1.0 / (1 - r*r) )) >= 2 THEN 1 ELSE 0 END AS signif_approx
+FROM rstat
+ORDER BY category_name;
