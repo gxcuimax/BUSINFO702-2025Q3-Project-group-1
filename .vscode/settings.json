@@ -4,8 +4,11 @@
             "previewLimit": 50,
             "driver": "SQLite",
             "name": "trend",
-            "database": "${workspaceFolder:BUSINFO702-2025Q3-Project-group-1}/trend.db"
+            "database": "trend.db"
         }
     ],
-    "sqltools.useNodeRuntime": true
+    "sqltools.useNodeRuntime": true,
+    "[snippets]": {
+        "editor.tabCompletion": "on"
+    }
 }

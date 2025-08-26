@@ -3,12 +3,14 @@ erDiagram
         int trend_id pk
         int date_id FK
         int location_id FK
-        int ptrend_id FK
+        int product_1st FK
+        int product_2nd FK
+        int product_3rd FK
         int vtrend_id FK
         real total_sales
         real total_quantity
         real total_profit
-        real total_orders
+        int total_orders
         real avg_discount
         real total_views
         real total_likes
@@ -37,27 +39,27 @@ erDiagram
         text race_distribution
         text marital_distribution
         text citizenship_distribution
-        int employment_rate
-        int armed_rate
+        int employment_count
+        int enlistment_count
+        int NILF_count
         text education_distribution
     }
 
-    ProductTrend {
-        int ptrend_id PK
-        text orders_Office_Supplies
-        text top_products_OS
+    Product {
+        int product_id PK
+        text product
+        text category
+        int orders_Office_Supplies
         real sales_OS
         real quantity_OS
         real profit_OS
         real avg_discount_OS
-        text orders_Furniture
-        text top_products_F
+        int orders_Furniture
         real sales_F
         real quantity_F
         real profit_F
         real avg_discount_F
-        text orders_Technology
-        text top_products_T
+        int orders_Technology
         real sales_T
         real quantity_T
         real profit_T
@@ -67,7 +69,6 @@ erDiagram
     YouTubeVideoTrend {
         int vtrend_id PK
         text top_categories
-        text top_tags
         text video_1st
         text description_1st
         text engagement_1st
@@ -82,6 +83,6 @@ erDiagram
 
     Trend }o--|| Time : "by time"
     Trend }o--|| Location : "in region"
-    Trend }o--|| ProductTrend : "about product"
+    Trend }o--|| Product : "about product"
     Trend }o--|| YouTubeVideoTrend : "about YouTube video"
 
