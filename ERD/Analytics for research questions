@@ -1,70 +1,78 @@
 -- RQ1: Do demographic characteristics drive differences in e-commerce consumption patterns?
 -- Ecom aggregation: State x Year x Month x category
+DROP VIEW IF EXISTS ecom_agg;
+
 CREATE VIEW ecom_agg AS
 SELECT 
-    customer_state AS state,
+    customer_state AS state_name,
     CAST(strftime('%Y', order_date) AS INT) AS year,
     CAST(strftime('%m', order_date) AS INT) AS month,
-    category_name,
-    SUM(sales_per_order) AS total_sales,
-    SUM(profit_per_order) AS total_profit,
-    SUM(order_quantity) AS total_quantity
+    
+    SUM(sales_per_order)   AS total_sales,
+    SUM(profit_per_order)  AS total_profit,
+    SUM(order_quantity)    AS total_quantity
 FROM ecommerce
-GROUP BY state, year, month, category_name;
+GROUP BY state_name, year, month;
 
 -- Demo aggregation:  State x Year x Month
--- *** I plan that create the table as below when we define the var dictionary, will change for running this after we settle data clean done.
--- CREATE VIEW demo_var_dictionary AS
--- SELECT
--- YEAR,
--- MONTH,
--- STATEFIP,
--- WTFINL AS w,
--- AGE,
--- EDUC,
--- EMPSTAT,
--- SEX,
--- CITIZEN,
--- ...（CASE...WHEN...）
--- FROM Demo;
--- DROP VIEW IF EXISTS demo_agg;
-
 CREATE VIEW demo_agg AS
 SELECT
     YEAR,
     MONTH,
-    STATEFIP AS state_name,
-    
-    -- Total weight
-    SUM(w) AS total_weight,
+    state_name,
 
-    -- Average age
-    SUM(w * AGE) * 1.0 / SUM(w) AS avg_age,
+    -- Total_weight
+    SUM(HWTFINL) AS total_weight,
 
-    -- Share bachelor and above
-    SUM(CASE WHEN education_group IN ('Undergraduate','Graduate and above') THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_undergraduate_plus,
-	
-	-- Share bachelor
-	SUM(CASE WHEN education_group = 'Undergraduate' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_undergraduate,
+    -- Average ages
+    SUM(HWTFINL * AGE) * 1.0 / SUM(HWTFINL) AS avg_age,
 
-	-- Share master and above
-    SUM(CASE WHEN education_group = 'Graduate and above' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_graduate_plus,
-	
-    -- Share employed
-    SUM(CASE WHEN employment_group = 'At work' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_employed,
+    -- Eduction
+    SUM(CASE WHEN EDUC IN ('Undergraduate','Graduate and above') THEN HWTFINL ELSE 0 END) * 1.0 / SUM(HWTFINL) AS share_undergraduate_plus,
+    SUM(CASE WHEN EDUC = 'Undergraduate' THEN HWTFINL ELSE 0 END) * 1.0 / SUM(HWTFINL) AS share_undergraduate,
+    SUM(CASE WHEN EDUC = 'Graduate and above' THEN HWTFINL ELSE 0 END) * 1.0 / SUM(HWTFINL) AS share_graduate_plus,
 
-    -- Share unemployed
-    SUM(CASE WHEN employment_group = 'Unemployed' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_unemployed,
+    -- Employment
+    SUM(CASE WHEN EMPSTAT = 'At work' THEN HWTFINL ELSE 0 END) * 1.0 / SUM(HWTFINL) AS share_employed,
+    SUM(CASE WHEN EMPSTAT = 'Unemployed' THEN HWTFINL ELSE 0 END) * 1.0 / SUM(HWTFINL) AS share_unemployed,
 
-    -- Share male
-    SUM(CASE WHEN male = 'Male' THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_male,
+    -- Gender
+    SUM(CASE WHEN SEX = 'Male' THEN HWTFINL ELSE 0 END) * 1.0 / SUM(HWTFINL) AS share_male,
 
-    -- share citizen
-    SUM(CASE WHEN citizenship_status IN ('Born in U.S','Born in U.S. outlying','Born abroad of American parents','Naturalized citizen') 
-             THEN w ELSE 0 END) * 1.0 / SUM(w) AS share_citizen
+    -- Citizen
+    SUM(CASE WHEN CITIZEN IN ('Born in U.S','Born in U.S. outlying','Born abroad of American parents','Naturalized citizen') 
+             THEN HWTFINL ELSE 0 END) * 1.0 / SUM(HWTFINL) AS share_citizen
+FROM demography
+GROUP BY YEAR, MONTH, state_name;
 
-FROM demo_var_dictionary
-GROUP BY YEAR, MONTH, STATEFIP;
+-- Panel Data with Differences (for RQ1)
+DROP VIEW IF EXISTS panel_rq1;
+
+CREATE VIEW panel_rq1 AS
+SELECT
+    e.year,
+    e.month,
+    e.state_name,
+
+    e.total_sales,
+    e.total_profit,
+    e.total_quantity,
+
+    d.avg_age,
+    d.share_undergraduate_plus,
+    d.share_undergraduate,
+    d.share_graduate_plus,
+    d.share_employed,
+    d.share_unemployed,
+    d.share_male,
+    d.share_citizen
+FROM ecom_agg e
+LEFT JOIN demo_agg d
+  ON e.year = d.year
+ AND e.month = d.month
+ AND e.state_name = d.state_name;
+
+
 
 -- Demo aggregation(Demo trend): YEAR X MONTH
 DROP VIEW IF EXISTS demo_trend;
