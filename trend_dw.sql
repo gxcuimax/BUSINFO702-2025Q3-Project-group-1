@@ -230,21 +230,21 @@ SET
 -- change categoryId to category_name
 UPDATE youtube
 SET categoryId = CASE CAST(categoryId AS INTEGER)
-    WHEN 1 THEN 'AutCorporate & Vehicles'
-    WHEN 2 THEN 'Music'
-    WHEN 10 THEN 'Comedy'
-    WHEN 15 THEN 'Science & Technology'
-    WHEN 17 THEN 'Movies'
-    WHEN 19 THEN 'Action/Adventure'
-    WHEN 20 THEN 'Classics'
-    WHEN 22 THEN 'Documentary'
-    WHEN 23 THEN 'Drama'
-    WHEN 24 THEN 'Family'
-    WHEN 25 THEN 'Foreign'
-    WHEN 26 THEN 'Horror'
-    WHEN 27 THEN 'Sci-Fi/Fantasy'
-    WHEN 28 THEN 'Thriller'
-    WHEN 29 THEN 'Shorts'
+    WHEN 1 THEN 'Film & Animation'
+    WHEN 2 THEN 'Autos & Vehicles'
+    WHEN 10 THEN 'Music'
+    WHEN 15 THEN 'Pets & Animals'
+    WHEN 17 THEN 'Sports'
+    WHEN 19 THEN 'Travel & Events'
+    WHEN 20 THEN 'Gaming'
+    WHEN 22 THEN 'People & Blogs'
+    WHEN 23 THEN 'Comedy'
+    WHEN 24 THEN 'Entertainment'
+    WHEN 25 THEN 'News & Politics'
+    WHEN 26 THEN 'Howto & Style'
+    WHEN 27 THEN 'Education'
+    WHEN 28 THEN 'Science & Technology'
+    WHEN 29 THEN 'Nonprofits & Activism'
     ELSE categoryId
 END,
 trending_date = DATE(trending_date);
