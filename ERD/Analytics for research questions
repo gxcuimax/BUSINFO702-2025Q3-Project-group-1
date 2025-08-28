@@ -1,3 +1,4 @@
+-- RQ1: Do demographic characteristics drive differences in e-commerce consumption patterns?
 -- Ecom aggregation: State x Year x Month x category
 CREATE VIEW ecom_agg AS
 SELECT 
@@ -8,7 +9,7 @@ SELECT
     SUM(sales_per_order) AS total_sales,
     SUM(profit_per_order) AS total_profit,
     SUM(order_quantity) AS total_quantity
-FROM Ecom
+FROM ecommerce
 GROUP BY state, year, month, category_name;
 
 -- Demo aggregation:  State x Year x Month
