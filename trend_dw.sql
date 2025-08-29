@@ -8,6 +8,7 @@ SELECT 'Extracting data';
 
 SELECT 'Cleaning data';
 -- Update all demographic information
+ALTER TABLE demography ADD COLUMN state_name TEXT;
 UPDATE demography 
 SET 
     -- State names based on STATEFIP codes
@@ -451,6 +452,7 @@ GROUP BY STATEFIP;
 SELECT 'Location done';
 -- load to YoutubeVideoTrend
 -- calculate total engagement = views + likes - dislikes + comments
+DROP TABLE IF EXISTS video_date;
 CREATE TEMP TABLE video_date AS
 WITH video_engagement AS (
     SELECT
