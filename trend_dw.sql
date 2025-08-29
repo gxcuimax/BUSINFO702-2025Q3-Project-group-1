@@ -11,7 +11,7 @@ SELECT 'Cleaning data';
 UPDATE demography 
 SET 
     -- State names based on STATEFIP codes
-    STATEFIP = CASE STATEFIP
+    state_name = CASE CAST(STATEFIP AS INT)
         WHEN 1  THEN 'Alabama'
         WHEN 2  THEN 'Alaska'
         WHEN 4  THEN 'Arizona'
