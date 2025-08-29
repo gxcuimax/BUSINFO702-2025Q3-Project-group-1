@@ -369,6 +369,8 @@ CREATE TABLE Trend (
 );
 SELECT 'Loading data into data warehouse';
 -- load to Time dim
+-- time period of ecommerce is the shortest, but not as continual as youtube
+-- so use date data from youtube but set limit by ecommerce
 INSERT INTO Time (year, month, quarter, day, dayofweek)
 WITH distinct_dates AS (
     SELECT DISTINCT strftime('%Y-%m-%d', trending_date) AS trenddate
@@ -400,6 +402,7 @@ INSERT INTO Product
      orders_Consumer, sales_Consumer, quantity_Consumer, profit_Consumer, avg_discount_Consumer,
      orders_Home_Office, sales_Home_Office, quantity_Home_Office, profit_Home_Office, avg_discount_Home_Office)
 SELECT product_name, category_name, 
+    -- pivot longer of customer segments because of 3 values only
        SUM(CASE WHEN customer_segment = 'Corporate' THEN 1 ELSE 0 END) AS orders_Corporate,
        SUM(CASE WHEN customer_segment = 'Corporate' THEN sales_per_order ELSE 0 END) AS sales_Corporate,
        SUM(CASE WHEN customer_segment = 'Corporate' THEN order_quantity ELSE 0 END) AS quantity_Corporate,
@@ -430,6 +433,7 @@ SELECT
     round(AVG(PERNUM),2) AS avg_household,
     round(AVG(AGE),2),
     round(COUNT(CASE WHEN SEX = 'Male' THEN 1 END)*1.0/COUNT(*),4) AS male_rate,
+    -- cheching show that those are major across all states
     'At work:' ||ROUND(SUM(CASE WHEN EMPSTAT = 'At work' THEN 1.0 ELSE 0 END)*100/ COUNT(*),2)||'%, '||
         'Army:' ||ROUND(SUM(CASE WHEN EMPSTAT = 'Army' THEN 1.0 ELSE 0 END)*100/ COUNT(*),2)||'%, '||
         'NILF:' ||ROUND(SUM(CASE WHEN EMPSTAT = 'NILF' THEN 1.0 ELSE 0 END)*100/ COUNT(*),2)||'%',
@@ -451,7 +455,7 @@ GROUP BY STATEFIP;
 SELECT 'Location done';
 -- load to YoutubeVideoTrend
 -- calculate total engagement = views + likes - dislikes + comments
-DROP TABLE IF EXISTS video_date;
+DROP TABLE IF EXISTS video_date; -- temp table of interting and save the relationship between date and video trend
 CREATE TEMP TABLE video_date AS
 WITH video_engagement AS (
     SELECT
@@ -474,7 +478,7 @@ video_rank AS (
         ROW_NUMBER() OVER (PARTITION BY trending_date ORDER BY engagement DESC) AS rn
     FROM video_engagement
 ),
--- calculate top 3 categories
+-- calculate top 3 categories and group them by "|"
 top_cat AS (
     SELECT trending_date, GROUP_CONCAT(categoryId,'|') AS top_categories
     FROM (
@@ -570,10 +574,10 @@ FROM (
         y.trending_date,
         t.date_id,
         vtrend_id
-    FROM Time t JOIN youtube y ON y.trending_date = DATE(printf('%04d-%02d-%02d', t.year, t.month, t.day))
+    FROM Time t JOIN youtube y ON y.trending_date = DATE(printf('%04d-%02d-%02d', t.year, t.month, t.day)) 
         JOIN (SELECT MIN(ROWID) AS vtrend_id,trending_date FROM video_date GROUP BY trending_date) USING(trending_date)
     GROUP BY t.date_id
-    ) tv
+    ) tv -- one day has one video trend
 CROSS JOIN Location l
 JOIN product_rank pr 
     ON pr.order_date = tv.trending_date
