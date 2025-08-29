@@ -8,11 +8,10 @@ SELECT 'Extracting data';
 
 SELECT 'Cleaning data';
 -- Update all demographic information
-ALTER TABLE demography ADD COLUMN state_name TEXT;
 UPDATE demography 
 SET 
     -- State names based on STATEFIP codes
-    state_name = CASE CAST(STATEFIP AS INT)
+    STATEFIP = CASE CAST(STATEFIP AS INT)
         WHEN 1  THEN 'Alabama'
         WHEN 2  THEN 'Alaska'
         WHEN 4  THEN 'Arizona'
