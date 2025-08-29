@@ -1,0 +1,263 @@
+---
+title: "Aligning YouTube Interests, Demographics, and E-Commerce: Multi-Source Analysis of U.S. Consumer Trends"
+author: "Yucheng Qin, Kyle Huang, Anchal Anchal, Karuna Kambalapadu Eediga"
+format:
+  pdf:
+    geometry:
+      - top=18mm
+      - left=18mm
+      - right=18mm
+      - bottom=22mm
+      - heightrounded
+    colorlinks: true
+    fig-numbering: true
+editor: visual
+---
+# Executive Summary
+
+This project examines how demographic structures and digital engagement influence U.S. e-commerce consumption, offering insights relevant to emerging markets. The analysis integrates state–month e-commerce transactions, demographic survey data, and YouTube trending engagement in U.S. from 2021 to 2022, merged into panel datasets to capture both structural and dynamic relationships.
+
+Five research questions were addressed. RQ1 found that raw correlations between demographics and sales, such as the negative link with citizenship, disappear once fixed effects are applied. RQ2 showed that states with higher education consistently allocate more spending to technology, though short-term changes in education shares do not drive sales. RQ3 highlighted alignment between demographic improvements and YouTube preferences, particularly in technology and entertainment. RQ4 found little evidence that YouTube trends forecast e-commerce sales. RQ5 revealed stronger education elasticity for technology (0.65) and a negative elasticity for office supplies (–0.30), though not statistically significant.
+
+Overall, three insights emerge: demographic effects are structural and long-run, education is the strongest driver of technology adoption, and YouTube trends reflect culture but lack predictive power for consumption. For stakeholders, this underscores technology as an education-driven growth opportunity, while highlighting the need for better forecasting tools.
+
+\newpage
+
+# Data preparation
+
+## Star Schema Design
+
+To facilitate multifaceted analysis of e-commerce transactions, demographic profiles, and YouTube trending data, a dimensional data model was architected utilizing the star schema paradigm. This design was selected for its inherent simplicity and high query performance, which are optimal for business intelligence and online analytical processing (OLAP). The resultant schema (@fig-star-schema) is composed of a central fact table linked to four descriptive dimension tables as follow:
+
+![ER diagram of star schema](ERD\star schema.drawio.png){#fig-star-schema fig-cap="Figure 0 ER diagram of star schema" width=60%}
+
+- **Fact Table**: The centre of the data warehouse is the `Trend` fact table, engineered to capture quantitative performance metrics from the e-commerce and YouTube source systems. The level of this table is set at a daily and state-wide level, meaning each individual row summarizes all measured activities (like total sales and total video views) that occurred in a single state on a single day. Each record represents daily top three products and video trend in YouTube in a perticular US state, assuming that every state has the same video trend as national one. The table is linked to the dimension tables through unique keys representing time, location, video trends, and the top three products.
+
+- **Dimension Tables**:
+
+    1. Time Dimension: This dimension table is derived from the date fields present in the source datasets. It provides the temporal context for the facts, enabling time-series analysis. It incorporates a natural chronological hierarchy with levels for Year, Quarter, Month, Day, and Day of Week. This structure permits analysts to examine trends at a daily granularity, aggregate the data to observe monthly, quarterly, or annual patterns, and also analyze trends based on the day of the week.
+
+    2. Location Dimension: This dimension provides the geographical context for the facts, containing descriptive demographic attributes for each location. It features a primary geographical hierarchy with levels for Region and State. Furthermore, it supports analytical roll-ups of its demographic distribution attributes, such as the top three categories for race, marital status, citizenship, employment, and education. This allows for the aggregation of detailed state-level demographic profiles to create summarized, region-level insights.
+
+    3. Product Dimension: This dimension provides detailed, descriptive information about each unique product. Attributes include the product's name and its assigned category, allowing for analysis of sales performance by individual items or by product groups.
+
+    4. YouTubeVideoTrend Dimension: This dimension is derived from the YouTube dataset. It captures daily cultural trends by storing qualitative and quantitative data about the highest-performing videos and categories for each day a video was trending. Due to large amount of videos trending daily, this dimension stores key information for only the top three performing videos to represent the day's trend. The ranking is determined by a calculated engagement score, where $engagement = views + likes - dislikes + comments$.
+
+## Data Warehouse Construction
+
+An Extract-Load-Transform (ELT) architecture was implemented exclusively within the SQLite database engine, utilizing a single SQL script (`trend_dw.sql`). This methodology leverages the database's native processing power for all data manipulation, resulting in a self-contained and reproducible workflow.
+
+### Extract
+
+The Extract phase consists of accessing the raw data from the three disparate source systems. In this project, the datasets were provided as Comma-Separated Values (CSV) files. The extraction process is therefore the initial read operation of these files from the local file system.
+
+### Load
+
+The Load phase involves the ingestion of the raw, untransformed data directly into the SQLite database. The `.import` command-line utility was employed to create and populate three temporary tables: `demography`, `ecommerce`, and `youtube`. This procedure collocates the source data within the database environment, where it can be transformed efficiently using SQL.
+
+```{sqlite3,label: lst-load,code-cap: "sqlite3 command of loading data",eval: FALSE}
+# loading data through sqlite3 cmd
+.import --csv --schema temp data\cps_00001.csv demography
+.import --csv --schema temp data\Ecommerce_data.csv ecommerce
+.import --csv --schema temp data\US_youtube_trending_data.csv youtube
+```
+
+### Transform
+
+The Transform phase constitutes the most complex stage of the ELT pipeline. It commences with an initial cleaning of the staged data, followed by a series of SQL transformations that populate the dimension tables first, and finally the central fact table to construct the star schema.
+
+1. Data Cleaning
+
+Before populating the dimensional model, the raw data within the demography, ecommerce, and youtube staging tables is cleaned and standardized. This involves using `UPDATE` statements with `CASE` expressions to transform ID numbers into human-readable text (e.g., converting `STATEFIP` codes to state names, `RACE` codes to race descriptions) and to standardize date formats across tables. This preparatory step ensures data consistency and quality before the main transformation logic is applied. (see Appendix or `trend_dw.sql`)
+
+2. Schema Creation
+
+Following the cleaning process, the logical structure of the data warehouse was built based on star schema. `DROP TABLE IF EXISTS` statement was run before creating tables in case of re-run. Subsequently, `CREATE TABLE` statements define the schema for the central Trend fact table and the four dimension tables, establishing primary keys, foreign keys, and data types, which is shown in Appendix and `trend_dw.sql` script. This creates the empty framework of the star schema, ready for data population.
+
+3. Filling Dimension Tables
+
+With the clean data and defined schema in place, each dimension table is populated through a dedicated `INSERT INTO ... SELECT` statement that transforms and aggregates data from the staging tables.
+
+- `Time` Dimension: This table is populated by creating a complete daily calendar for the period of analysis. Although the `ecommerce` data defines the overall start and end dates for the analysis, it lacks entries for many days within that range. To create a continuous timeline, the dimension is built using the more consistent daily dates from the `youtube` dataset. These dates are filtered to fall strictly within the minimum and maximum order dates from the ecommerce data, ensuring a complete and relevant time dimension. Subsequently, the `strftime` function is used to parse each date into its constituent components.
+
+- `Product` Dimension: This table is populated by grouping the `ecommerce` data by product. The query pivots the data based on the three distinct values in the `customer_segment` column (Corporate, Consumer, Home Office) to create specific columns for sales, quantity, and profit metrics for each segment.
+
+- `Location` Dimension: This table is populated by grouping the cleaned `demography` data by state (`STATEFIP`). During this process, key demographic metrics like population are calculated. For distributional attributes, an analysis of the source data identified the most prevalent categories. Consequently, the transformation logic creates textual summaries by aggregating percentages for these primary groups: race (Black, White, Asian or Pacific Islander), marital status (Married, Single, Divorced), citizenship (Native-born, Naturalized, Non-Citizen), employment status (At work, Army, NILF - Not in Labor Force), and education level (Less than High School, High School, Bachelor or Higher). This method provides a concise yet representative demographic profile for each state.
+
+- `YouTubeVideoTrend` Dimension: Populating this table is a multi-step process. First, a temporary table is created to calculate a composite engagement score for each video and rank them on a daily basis, as well as storing relationship between date and `YouTubeVideoTrend`. 
+
+Subsequently, this temporary table is queried, and the data is pivoted to create a single row for each day, containing the top three trending videos and their engagement scores.
+
+
+
+4. Populating the Fact Table
+As the final step in the transformation process, the central `Trend` fact table is populated. This is accomplished SELECT statement that:
+
+- Joins all the previously populated dimension tables with aggregated data from the staging tables.
+
+- Calculates all quantitative measures by applying aggregate functions like `SUM` and `AVG`.
+
+- Groups the results by `date_id` and `location_id` to ensure the data conforms to the defined granularity of the fact table.
+
+
+
+# Research Analysis
+
+## Research Questions
+
+### RQ1. Do demographic characteristics drive differences in e-commerce consumption patterns?
+
+E-commerce markets are not uniform: consumer demand often reflects the underlying demographic structure of a region. Factors such as age distribution, education levels, and employment status can significantly influence what categories of products households are willing and able to purchase. For example, younger and more educated populations may allocate more spending toward technology products, while older demographics may prioritize household-related categories such as furniture.
+
+This question is particularly important in the context of fast-growing but under-researched e-commerce markets such as New Zealand. Local stakeholders lack reliable intelligence on which demographic segments are driving demand, making it difficult to design targeted marketing strategies or region-specific resource allocation. By leveraging detailed U.S. data as a benchmark, it’s possible to test whether clear demographic–consumption linkages emerge across product categories in technology, furniture and office Supplies.
+
+Answering RQ1 provides two key insights.
+
+The first one is, it highlights whether structural demographic variables explain regional heterogeneity in e-commerce consumption, beyond random fluctuations.
+
+Second, it establishes a baseline for later questions, linking social shifts like education, employment, age, etc. with both consumption and digital engagement signals shown as YouTube trends.
+
+Ultimately, RQ1 is about discovering systematic demographic drivers of online demand. For executives, this means moving from intuition like young people probably buy more tech toward evidence-based strategy, where investments in marketing, product focus, and regional planning are guided by clear demographic patterns.
+
+### RQ2. Is there a structural relationship between changes in educational attainment and consumption of high-value categories (Technology)?
+
+Education has long been recognized as a critical driver of household consumption. Higher educational attainment is often associated with greater income potential, digital literacy, and preference for advanced products, particularly technology-related goods. If a strong structural link exists, regions with a more educated population may systematically allocate a larger share of their consumption to technology categories compared with traditional segments such as furniture or office supplies.
+
+This question is especially relevant for fast-growing e-commerce markets where consumer intelligence is scarce. In contexts like New Zealand, reliable market research reports are limited, making it difficult for firms to identify which social shifts, such as increasing tertiary education translate into tangible changes in product demand. Leveraging U.S. data provides an opportunity to test whether education-driven structural patterns in technology adoption can be observed, offering a proxy for markets with fewer available insights.
+Addressing RQ2 provides two contributions.
+
+First, it tests whether education levels are disproportionately associated with technology consumption compared to other categories, providing evidence for structural demand segmentation.
+Second, it links demographic progress in education attainment with digital consumption categories, which can guide firms in anticipating future demand growth as education levels rise.
+For executives, this means validating or rejecting the intuition that “better educated consumers buy more technology products,” turning it into a measurable structural insight for market positioning and strategic investment.
+
+### RQ3. Are nationwide demographic trends consistent with YouTube video preference trends?
+
+Digital media preferences are increasingly shaped by demographic shifts in society. Younger populations with higher educational attainment and stronger digital literacy are often more engaged in online platforms, particularly in categories such as Entertainment, Gaming, and Technology. At the same time, demographic variables such as employment and gender composition reflect broader social dynamics that can influence the adoption of digital content.
+
+For emerging e-commerce and digital economies, this question holds significant importance. Understanding whether demographic change aligns with shifts in nationwide digital content preferences provides insight into how consumer structures translate into media engagement. In markets such as New Zealand, where detailed digital consumption intelligence is limited, analyzing United States data enables us to explore whether stable structural links exist between demographics and YouTube preferences.
+
+Answering this question contributes to two objectives. First, it examines whether demographic developments, such as rising shares of young and educated populations, correspond to stronger engagement with digital categories like Gaming and Technology. Second, it provides a lens for connecting long-term demographic change with online cultural trends, thus allowing firms to anticipate shifts in consumer attention and digital marketing opportunities.
+
+### RQ4. Can YouTube trending videos predict e-commerce consumption trends?
+
+RQ4 asks whether YouTube trending videos can serve as leading indicators for e-commerce consumption trends. The rationale is that digital engagement patterns, such as viewing and liking videos in categories like Technology, Gaming, or Entertainment, may anticipate shifts in consumer demand for related product categories. If such predictive links exist, firms could leverage YouTube metrics as a low-cost, real-time signal of consumer preferences, enhancing demand forecasting and marketing strategy.
+
+### RQ5. Does the demographic sensitivity of consumption behavior differ significantly across product categories?
+
+Demographic factors such as education, employment, and age are widely recognized as important drivers of consumption demand. Yet their impact may vary substantially across product categories. Technology products are often linked to education levels and digital literacy, furniture demand is closely tied to household structure, and office supplies are associated with employment conditions. Understanding these differences is critical for firms, as it helps identify which categories are more responsive to demographic change and therefore deserve priority in resource allocation and strategic planning.
+
+## SQL for Business Analytics
+
+### RQ1. Do demographic characteristics drive differences in e-commerce consumption patterns?
+
+To address Research Question 1, two foundational datasets are constructed. The first dataset, ecom_agg, aggregates e-commerce transactions at the state–month–category level, producing indicators such as total sales, total profit, and total quantity. The second dataset, demo_agg, aggregates demographic survey data at the state–month level, generating weighted measures including average age, share of population with undergraduate education or above, employment and unemployment shares, gender composition, and citizenship share. By merging these datasets, the panel dataset panel_rq1 is formed, aligning category-level consumption outcomes with corresponding demographic structures. 
+
+The analysis proceeds in two stages. The first stage applies raw correlation analysis. As shown in @fig-1, Pearson correlation coefficients, derived from the covariance formula, are computed between category-level sales and demographic variables. The results indicate that the citizenship share is consistently and strongly negatively correlated with sales, with values around –0.57 across categories. The unemployment share shows a moderate positive correlation with sales in Technology and Office Supplies, approximately 0.25. Other variables, such as average age and gender, exhibit weaker associations. These findings suggest that demographic structures appear linked to consumption differences, but such relationships may be influenced by persistent state-level heterogeneity or seasonal factors. 
+
+![Raw correlation by category](figures\figure.files\Figure 1.png){#fig-1 fig-pos="H"}
+
+The second stage introduces fixed effects adjustments. As shown in @fig-2, a Two-Way Fixed Effects demeaning procedure is applied, which controls both state and month averages. This approach eliminates long-term cross-state heterogeneity and common temporal shocks, isolating within-state and within-time variation. After adjustment, the correlations between demographic variables and sales diminish substantially, with all coefficients approaching zero and absolute values remaining below 0.03. 
+
+![TWFE-adjusted correlation](figures\figure.files\Figure 2.png){#fig-2 fig-pos="H"}
+
+In conclusion, demographic variables initially appear correlated with category-level sales, particularly citizenship and unemployment shares. However, these associations largely disappear once state and temporal fixed effects are controlled. This indicates that the observed relationships are primarily driven by structural differences across states rather than short-term demographic dynamics. From a managerial perspective, firms should regard regional baselines, such as states with systematically higher or lower citizenship shares, as structural demand characteristics rather than expecting short-run demographic fluctuations to materially influence consumption patterns.
+
+### RQ2. Is there a structural relationship between changes in educational attainment and consumption of high-value categories (Technology)?
+
+To address Research Question 2, the dataset panel_rq2 was constructed, which integrates e-commerce aggregates (ecom_agg) with demographic aggregates (demo_agg). This allows category-level outcomes such as total sales to be analyzed alongside demographic measures, with particular focus on educational attainment, measured as the share of the population with undergraduate or higher qualifications. Interaction terms between education and product categories were created to isolate structural category-specific effects, especially for Technology.
+The analysis proceeded in two complementary directions. First, interaction structures  was examined by comparing states with different educational profiles across categories. As shown in @fig-3, the cross-sectional relationship between education and technology consumption is weakly negative on average, with considerable dispersion across states. This indicates that the simple structural correlation is not as strong as expected, and that education may not serve as the sole driver of technology adoption. Second, the panel_rq2_diff dataset was used to track month-to-month changes in both education shares and sales. As shown in @fig-4, education shares remain nearly constant over time while technology sales fluctuate substantially, suggesting that short-term demographic changes do not align with short-term sales dynamics. 
+
+![Education and Technology Consumption Share (State Level)](figures\figure.files\Figure 3.png){#fig-3 fig-pos="H"}
+
+![Month-to-Month Changes in Education adn Sales (Technology only)](figures\figure.files\Figure 4.png){#fig-4 fig-pos="H"}
+
+
+
+
+The clustering analysis in state_cluster_rq2 further illustrates these insights. As shown in @fig-5, states differ substantially in their average education levels and corresponding technology sales shares, with some states displaying both higher education attainment and higher consumption shares. However, the wide dispersion and presence of volatility imply that education interacts with other structural and cultural factors in shaping technology demand.
+
+![States by Education adn Technology Sales share (Bubble size = volatility)](figures\figure.files\Figure 5.png){#fig-5 fig-pos="H"}
+
+In conclusion, the evidence suggests that the relationship between education and technology consumption is not uniformly strong across states. While short-term month-to-month changes in education shares do not predict immediate consumption shifts, states with higher educational attainment tend to be positioned toward the higher end of technology consumption, albeit with notable heterogeneity. From a managerial perspective, education may serve as one useful indicator when targeting regions for technology products, but firms should also account for other persistent state-specific characteristics that influence consumption patterns.
+
+### RQ3. Are nationwide demographic trends consistent with YouTube video preference trends?
+
+To address Research Question 3, a nationwide panel dataset was constructed by merging monthly demographic aggregates (demo_trend) with YouTube category engagement shares (youtube_trend). The merged dataset (panel_rq3) provides a combined view of demographic structures and digital engagement preferences at the national level.
+
+The analysis proceeds in two steps. First, demographic aggregates were generated by weighting state-level measures by survey weights, producing national averages of key indicators such as age, education attainment, employment status, gender distribution, and citizenship. Second, YouTube video records were reclassified into three consolidated categories: Entertainment, Gaming, and Technology. Monthly engagement was aggregated in terms of views, likes, comments, and video counts, and relative category shares were calculated to capture preference shifts over time.
+
+As shown in @fig-6, national education attainment (share of undergraduate or higher population) moved broadly in line with technology consumption share and overall YouTube engagement (average views). This alignment suggests that long-run demographic improvements in education coincide with greater orientation toward technology-related content and higher levels of digital engagement.
+
+![Education vs Youtube Technology Preference (Standardized)](figures\figure.files\Figure 6.png){#fig-6 fig-pos="H"}
+
+Complementing this, @fig-7 compares national average age with YouTube’s Entertainment share. The visual pattern indicates that periods of a relatively younger population are associated with higher attention to entertainment content, while older demographic shifts correspond with reduced entertainment engagement. This provides further evidence that demographic structures and online preferences evolve in tandem, albeit differently across content categories.
+
+![Average Age vs Entertainment YouTube Share](figures\figure.files\Figure 7.png){#fig-7 fig-pos="H"}
+
+In conclusion, @fig-6 and @fig-7 illustrate that demographic trends, particularly education and age are mirrored in the evolution of online video engagement. While the alignment is visible in broad structural terms, the strength and timing of these co-movements will benefit from formal techniques such as Dynamic Time Warping or cross-correlation analysis. For managerial purposes, the findings imply that demographic trajectories shape not only offline consumption but also digital engagement landscapes, with education linked to technological adoption and age linked to entertainment demand.
+
+### RQ4. Can YouTube trending videos predict e-commerce consumption trends?
+
+A panel dataset (panel_rq4) was constructed by combining national-level e-commerce sales with YouTube engagement shares across Technology, Furniture, and Office Supplies. Lag structures up to three months and first differences were applied to capture potential dynamic relationships.
+As shown in @fig-8, Technology sales and YouTube Technology share follow broadly similar long-term trajectories, but the co-movement reflects parallel trends rather than predictive power.
+
+![Technology Sales vs YouTube Technology Share (Long-trem Trend)](figures\figure.files\Figure 8.png){#fig-8 fig-pos="H"}
+
+Short-run dynamics, illustrated in @fig-9, highlight sharp fluctuations in sales compared to relatively stable YouTube shares, with no clear contemporaneous alignment.
+
+![Month-to-Month Changes in Technology Sales and YouTube Share](figures\figure.files\Figure 9.png){#fig-9 fig-pos="H"}
+
+Lagged correlation analysis in @fig-10 further confirms the absence of predictive strength: coefficients remain small across all categories and lags, generally below 0.2, with no consistent direction.
+
+![Lagged Correlations between YouTube and E-commerce by Category](figures\figure.files\Figure 10.png){#fig-10 fig-pos="H"}
+
+Taken together, the findings indicate that YouTube trending metrics are not reliable predictors of near-term e-commerce sales. Instead, they should be viewed as indicators of cultural and entertainment interests rather than forecasting tools for consumption. From a managerial perspective, YouTube signals may help in understanding audience engagement and brand visibility but cannot substitute for demand forecasting models grounded in economic and market fundamentals.
+
+### RQ5. Does the demographic sensitivity of consumption behavior differ significantly across product categories?
+
+To address this question, state–month–category level sales were merged with demographic measures, with log transformations applied to capture elasticity-style effects. The results highlight notable differences across categories.
+
+As shown in @fig-11, technology sales are more responsive to higher education attainment, while furniture shows little association and office supplies trend slightly downward.
+
+![Scatterplot of Education and Sales by Product Category](figures\figure.files\Figure 11.png){#fig-11 fig-pos="H"}
+
+Elasticity estimates in @tbl-1 confirm this pattern: technology exhibits a positive elasticity of about 0.65, compared with near-zero for furniture and a negative –0.30 for office supplies. However, t-statistics remain below conventional thresholds, suggesting limited statistical confidence.
+
+: Elasticity of Sales with respect to Education (Undergraduate+ Share) {#tbl-1}
+
+| Category        |    n |      r | Elasticity | t-stat | Significance |
+|:----------------|-----:|-------:|-----------:|-------:|-------------:|
+| Furniture       | 1082 |  0.006 |      0.082 |  0.194 |            0 |
+| Office Supplies | 1132 | -0.022 |     -0.305 | -0.729 |            0 |
+| Technology      | 1039 |  0.047 |      0.653 |  1.509 |            0 |
+
+A parallel analysis with employment shares in @fig-12 and @tbl-2 yields uniformly negative elasticities, ranging from –1.57 for technology to –2.82 for office supplies, all statistically significant at conventional levels. This indicates that higher employment shares are associated with lower category sales, potentially reflecting substitution effects or measurement issues.
+
+![Employment vs Sales by Product Category](figures\figure.files\Figure 12.png){#fig-12 fig-pos="H" width=80%}
+
+: Elasticity of Sales with respect to Employment Share {#tbl-2}
+
+| Category        |    n |      r | Elasticity | t-stat | Significance |
+|:----------------|-----:|-------:|-----------:|-------:|-------------:|
+| Furniture       | 1082 | -0.124 |     -2.493 | -4.113 |            1 |
+| Office Supplies | 1132 | -0.139 |     -2.821 | -4.700 |            1 |
+| Technology      | 1039 | -0.078 |     -1.567 | -2.506 |            1 |
+
+Finally, @fig-13 shows that the overall sales structure remains stable across states, with office supplies dominating regardless of demographic profiles.
+
+![Sales Structure across States](figures\figure.files\Figure 13.jpg){#fig-13 fig-pos="H" width=80%}
+
+Overall, evidence suggests education exerts the strongest relative influence on technology demand, while employment effects appear more consistently negative. These findings point to suggestive, though partly inconclusive, demographic sensitivities in category-specific consumption.
+
+# Insight and Future Work
+
+The analysis of RQ1–RQ5 highlights several consistent insights. Demographic structures influence e-commerce demand primarily through long-run differences rather than short-term variation, as shown in RQ1 where fixed effects eliminated most raw correlations. Education emerged as the most important driver of technology consumption, both in RQ2 where higher attainment aligns with stronger technology demand, and in RQ5 where elasticity estimates indicate positive responsiveness to education. In contrast, employment and unemployment exhibit weaker or inconsistent associations, reinforcing that demographic sensitivity is category-specific. RQ3 further demonstrates that nationwide shifts in education and age are reflected in digital engagement, particularly in the growing share of technology-related YouTube content. However, RQ4 shows that YouTube engagement does not provide reliable short-run predictive power for e-commerce sales. Future work can strengthen these findings in three directions. First, applying more advanced causal methods, such as panel vector autoregression, could move beyond correlation to identify directionality of effects. Second, refining product categories, especially within technology, would help capture heterogeneity in education-driven demand. Third, validating the analysis with international or emerging market data would test the generalizability of structural patterns observed in the U.S. These extensions would provide more robust evidence to guide managerial decision-making in digital commerce and online engagement.
+
+
+
+
+
+
+
+
+

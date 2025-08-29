@@ -464,7 +464,7 @@ WITH video_engagement AS (
         (IFNULL(view_count,0) + IFNULL(likes,0) - IFNULL(dislikes, 0) + IFNULL(comment_count,0)) AS engagement
     FROM youtube
 ),
--- add order
+-- add order PS: window function works in sqlite3 above 3.25.0
 video_rank AS (
     SELECT 
         trending_date,
